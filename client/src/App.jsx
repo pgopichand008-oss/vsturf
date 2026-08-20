@@ -12,114 +12,296 @@ function App() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [formError, setFormError] = useState('');
 
-  // MongoDB / API state
   const [turf, setTurf] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState('');
+  const [turfLoading, setTurfLoading] = useState(true);
+  const [turfError, setTurfError] = useState('');
 
-  // Fetch turf information from our backend
+  const [slots, setSlots] = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState('');
+
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [bookingError, setBookingError] = useState('');
+
+  // ==========================================
+  // Fetch Turf Information
+  // ==========================================
+
   useEffect(() => {
     const fetchTurf = async () => {
       try {
+        setTurfLoading(true);
+        setTurfError('');
+
         const response = await fetch(
           'http://localhost:5000/api/turfs'
         );
 
         if (!response.ok) {
-          throw new Error('Failed to fetch turf information');
+          throw new Error(
+            'Failed to fetch turf information'
+          );
         }
 
         const data = await response.json();
 
         if (!data.length) {
-          throw new Error('No turf information found');
+          throw new Error(
+            'No turf information found'
+          );
         }
 
         setTurf(data[0]);
       } catch (error) {
-        console.error('Error fetching turf:', error);
-        setApiError(
+        console.error(
+          'Error fetching turf:',
+          error
+        );
+
+        setTurfError(
           'Unable to load turf information. Please try again.'
         );
       } finally {
-        setLoading(false);
+        setTurfLoading(false);
       }
     };
 
     fetchTurf();
   }, []);
 
-  // Temporary slots
-  // We will move these into MongoDB later.
-  const sampleSlots = [
-    {
-      time: '06:00 AM - 07:00 AM',
-      status: 'Available',
-      price: '₹800',
-    },
-    {
-      time: '07:00 AM - 08:00 AM',
-      status: 'Booked',
-      price: '₹800',
-    },
-    {
-      time: '05:00 PM - 06:00 PM',
-      status: 'Available',
-      price: '₹1,200',
-    },
-    {
-      time: '07:00 PM - 08:00 PM',
-      status: 'Available',
-      price: '₹1,200',
-    },
-  ];
+  // ==========================================
+  // Fetch Slots
+  // ==========================================
+
+  useEffect(() => {
+    const fetchSlots = async () => {
+      try {
+        setSlotsLoading(true);
+        setSlotsError('');
+
+        const response = await fetch(
+          'http://localhost:5000/api/slots'
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            'Failed to fetch slots'
+          );
+        }
+
+        const data = await response.json();
+
+        setSlots(data);
+      } catch (error) {
+        console.error(
+          'Error fetching slots:',
+          error
+        );
+
+        setSlotsError(
+          'Unable to load time slots. Please try again.'
+        );
+      } finally {
+        setSlotsLoading(false);
+      }
+    };
+
+    fetchSlots();
+  }, []);
+
+  // ==========================================
+  // Reserve Slot
+  // ==========================================
 
   function handleReserve(slot) {
+    if (slot.status === 'Booked') {
+      return;
+    }
+
     setSelectedSlot(slot);
     setShowConfirmation(false);
     setFormError('');
+    setBookingError('');
+    setBookingSuccess(false);
   }
+
+  // ==========================================
+  // Close Booking
+  // ==========================================
 
   function handleCloseBooking() {
     setSelectedSlot(null);
     setShowConfirmation(false);
     setFormError('');
+    setBookingError('');
+    setBookingSuccess(false);
   }
+
+  // ==========================================
+  // Continue to Confirmation
+  // ==========================================
 
   function handleContinue() {
     setFormError('');
 
     if (!bookingDate) {
-      setFormError('Please select a booking date.');
+      setFormError(
+        'Please select a booking date.'
+      );
       return;
     }
 
     if (!playerName.trim()) {
-      setFormError('Please enter your player or team name.');
+      setFormError(
+        'Please enter your player or team name.'
+      );
       return;
     }
 
     if (!/^\d{10}$/.test(phoneNumber)) {
-      setFormError('Please enter a valid 10-digit phone number.');
+      setFormError(
+        'Please enter a valid 10-digit phone number.'
+      );
       return;
     }
 
     setShowConfirmation(true);
   }
 
+  // ==========================================
+  // Edit Booking
+  // ==========================================
+
   function handleEditBooking() {
     setShowConfirmation(false);
+    setBookingError('');
   }
 
-  function handleConfirmBooking() {
-    alert('Booking confirmed successfully!');
+  // ==========================================
+  // Confirm Booking
+  // ==========================================
+
+  async function handleConfirmBooking() {
+    if (!selectedSlot || !turf) {
+      return;
+    }
+
+    try {
+      setBookingLoading(true);
+      setBookingError('');
+
+      const response = await fetch(
+        'http://localhost:5000/api/bookings',
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type': 'application/json',
+          },
+
+          body: JSON.stringify({
+            turf: turf._id,
+            slot: selectedSlot._id,
+            bookingDate: bookingDate,
+            playerName: playerName.trim(),
+            phoneNumber: phoneNumber,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Failed to create booking'
+        );
+      }
+
+      console.log(
+        'Booking created successfully:',
+        data.booking
+      );
+
+      setBookingSuccess(true);
+
+      // Update the slot in frontend
+      setSlots((currentSlots) =>
+        currentSlots.map((slot) =>
+          slot._id === selectedSlot._id
+            ? {
+                ...slot,
+                status: 'Booked',
+              }
+            : slot
+        )
+      );
+
+      setSelectedSlot((currentSlot) =>
+        currentSlot
+          ? {
+              ...currentSlot,
+              status: 'Booked',
+            }
+          : currentSlot
+      );
+    } catch (error) {
+      console.error(
+        'Booking error:',
+        error
+      );
+
+      setBookingError(
+        error.message ||
+          'Something went wrong while creating the booking.'
+      );
+    } finally {
+      setBookingLoading(false);
+    }
   }
+
+  // ==========================================
+  // Loading Screen
+  // ==========================================
+
+  if (turfLoading) {
+    return (
+      <div className="app-container">
+        <div className="loading-message">
+          Loading PGC Turf...
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // Error Screen
+  // ==========================================
+
+  if (turfError) {
+    return (
+      <div className="app-container">
+        <div className="error-message">
+          {turfError}
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // Main Application
+  // ==========================================
 
   return (
     <div className="app-container">
 
-      {/* Navigation */}
+      {/* ======================================
+          Navigation
+      ====================================== */}
+
       <header className="navbar">
+
         <div className="logo">
           <h2>
             🏏 <span>PGC</span>TURF🏏
@@ -127,438 +309,812 @@ function App() {
         </div>
 
         <nav className="nav-links">
-          <a href="#home">Home</a>
+
+          <a href="#home">
+            Home
+          </a>
 
           <a
             href="#slots"
-            onClick={() => setShowSlots(true)}
+            onClick={() =>
+              setShowSlots(true)
+            }
           >
             Book a Turf
           </a>
 
-          <a href="#info">Info</a>
+          <a href="#info">
+            Info
+          </a>
+
         </nav>
+
       </header>
+
 
       <main>
 
-        {/* API Loading State */}
-        {loading && (
-          <div className="loading-message">
-            Loading turf information...
-          </div>
-        )}
+        {/* ======================================
+            Hero Section
+        ====================================== */}
 
-        {/* API Error State */}
-        {apiError && (
-          <div className="error-message">
-            {apiError}
-          </div>
-        )}
+        <section
+          className="hero-section"
+          id="home"
+        >
 
-        {/* Main content appears after API data loads */}
-        {turf && (
-          <>
+          <span className="tagline-badge">
+            PREMIUM CRICKET ARENA
+          </span>
 
-            {/* Hero Section */}
-            <section className="hero-section" id="home">
+          <h1>
+            Play. Book. Enjoy.
+          </h1>
 
-              <span className="tagline-badge">
-                PREMIUM CRICKET ARENA
-              </span>
+          <p>
+            {turf.description}
+          </p>
 
-              <h1>
-                Play. Book. Enjoy.
-              </h1>
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={() =>
+              setShowSlots(!showSlots)
+            }
+          >
+            {showSlots
+              ? 'Close Slot List'
+              : 'Check Available Slots'}
+          </button>
+
+        </section>
+
+
+        {/* ======================================
+            Information Cards
+        ====================================== */}
+
+        <section
+          className="info-grid"
+          id="info"
+        >
+
+          {/* Location */}
+
+          <div className="info-card">
+
+            <span className="icon">
+              📍
+            </span>
+
+            <div>
+
+              <h4>
+                Location
+              </h4>
 
               <p>
-                {turf.description}
+                {turf.location}
               </p>
 
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => setShowSlots(!showSlots)}
-              >
-                {showSlots
-                  ? 'Close Slot List'
-                  : 'Check Available Slots'}
-              </button>
+            </div>
 
-            </section>
+          </div>
 
-            {/* Information Cards */}
-            <section className="info-grid" id="info">
 
-              <div className="info-card">
-                <span className="icon">📍</span>
+          {/* Operating Hours */}
 
-                <div>
-                  <h4>Location</h4>
-                  <p>{turf.location}</p>
-                </div>
+          <div className="info-card">
+
+            <span className="icon">
+              ⏰
+            </span>
+
+            <div>
+
+              <h4>
+                Operating Hours
+              </h4>
+
+              <p>
+                {turf.openingTime} –{' '}
+                {turf.closingTime}
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Pricing */}
+
+          <div className="info-card">
+
+            <span className="icon">
+              💰
+            </span>
+
+            <div>
+
+              <h4>
+                Pricing
+              </h4>
+
+              <p>
+                Starting at ₹
+                {turf.basePrice} / hour
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Turf */}
+
+          <div className="info-card">
+
+            <span className="icon">
+              🏏
+            </span>
+
+            <div>
+
+              <h4>
+                Turf
+              </h4>
+
+              <p>
+                {turf.name}
+              </p>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+        {/* ======================================
+            Slot Booking Section
+        ====================================== */}
+
+        {showSlots && (
+
+          <section
+            className="slots-section"
+            id="slots"
+          >
+
+            <div className="section-heading">
+
+              <span className="section-label">
+                BOOK YOUR SESSION
+              </span>
+
+              <h3>
+                Available Time Slots
+              </h3>
+
+              <p>
+                Choose your preferred time and reserve
+                your cricket session.
+              </p>
+
+            </div>
+
+
+            {/* Loading */}
+
+            {slotsLoading && (
+
+              <div className="loading-message">
+                Loading available slots...
               </div>
 
-              <div className="info-card">
-                <span className="icon">⏰</span>
+            )}
 
-                <div>
-                  <h4>Operating Hours</h4>
 
-                  <p>
-                    {turf.openingTime} – {turf.closingTime}
-                  </p>
-                </div>
+            {/* Error */}
+
+            {slotsError && (
+
+              <div className="error-message">
+                {slotsError}
               </div>
 
-              <div className="info-card">
-                <span className="icon">💰</span>
+            )}
 
-                <div>
-                  <h4>Pricing</h4>
 
-                  <p>
-                    Starting at ₹{turf.basePrice} / hour
-                  </p>
-                </div>
-              </div>
+            {/* Slots */}
 
-              <div className="info-card">
-                <span className="icon">🏏</span>
-
-                <div>
-                  <h4>Turf</h4>
-
-                  <p>{turf.name}</p>
-                </div>
-              </div>
-
-            </section>
-
-            {/* Slot Booking */}
-            {showSlots && (
-              <section
-                className="slots-section"
-                id="slots"
-              >
-
-                <div className="section-heading">
-
-                  <span className="section-label">
-                    BOOK YOUR SESSION
-                  </span>
-
-                  <h3>
-                    Available Time Slots
-                  </h3>
-
-                  <p>
-                    Choose your preferred time and reserve
-                    your cricket session.
-                  </p>
-
-                </div>
+            {!slotsLoading &&
+              !slotsError &&
+              slots.length > 0 && (
 
                 <div className="slots-grid">
 
-                  {sampleSlots.map((slot) => (
+                  {slots.map((slot) => (
+
                     <SlotCard
-                      key={slot.time}
-                      time={slot.time}
+                      key={slot._id}
+                      time={`${slot.startTime} - ${slot.endTime}`}
                       status={slot.status}
-                      price={slot.price}
-                      onReserve={handleReserve}
+                      price={`₹${slot.price}`}
+                      onReserve={() =>
+                        handleReserve(slot)
+                      }
                     />
+
                   ))}
 
                 </div>
 
-                {/* Booking Form */}
-                {selectedSlot && !showConfirmation && (
-                  <section className="booking-panel">
+              )}
 
-                    <div className="booking-header">
+
+            {/* ==================================
+                STEP 1 — Booking Form
+            ================================== */}
+
+            {selectedSlot &&
+              !showConfirmation && (
+
+                <section className="booking-panel">
+
+                  <div className="booking-header">
+
+                    <div>
+
+                      <span className="booking-label">
+                        STEP 1 OF 2
+                      </span>
+
+                      <h3>
+                        Complete Your Booking
+                      </h3>
+
+                    </div>
+
+
+                    <button
+                      type="button"
+                      className="close-booking-btn"
+                      onClick={handleCloseBooking}
+                      aria-label="Close booking panel"
+                    >
+                      ×
+                    </button>
+
+                  </div>
+
+
+                  {/* Booking Summary */}
+
+                  <div className="booking-summary">
+
+                    {/* Date */}
+
+                    <div className="booking-detail">
+
+                      <span>
+                        📅
+                      </span>
 
                       <div>
-                        <span className="booking-label">
-                          STEP 1 OF 2
-                        </span>
 
-                        <h3>
-                          Complete Your Booking
-                        </h3>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="close-booking-btn"
-                        onClick={handleCloseBooking}
-                        aria-label="Close booking panel"
-                      >
-                        ×
-                      </button>
-
-                    </div>
-
-                    {/* Booking Summary */}
-                    <div className="booking-summary">
-
-                      <div className="booking-detail">
-
-                        <span>📅</span>
-
-                        <div>
-                          <small>Date</small>
-
-                          <strong>
-                            {bookingDate || 'Choose date'}
-                          </strong>
-                        </div>
-
-                      </div>
-
-                      <div className="booking-detail">
-
-                        <span>⏰</span>
-
-                        <div>
-                          <small>Time</small>
-
-                          <strong>
-                            {selectedSlot.time}
-                          </strong>
-                        </div>
-
-                      </div>
-
-                      <div className="booking-detail">
-
-                        <span>💰</span>
-
-                        <div>
-                          <small>Price</small>
-
-                          <strong>
-                            {selectedSlot.price} / hour
-                          </strong>
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                    {/* Booking Form */}
-                    <div className="booking-form">
-
-                      <div className="form-group">
-
-                        <label htmlFor="booking-date">
-                          Select Date
-                        </label>
-
-                        <input
-                          id="booking-date"
-                          type="date"
-                          value={bookingDate}
-                          onChange={(event) => {
-                            setBookingDate(event.target.value);
-                            setFormError('');
-                          }}
-                        />
-
-                      </div>
-
-                      <div className="form-group">
-
-                        <label htmlFor="player-name">
-                          Player / Team Name
-                        </label>
-
-                        <input
-                          id="player-name"
-                          type="text"
-                          value={playerName}
-                          placeholder="Enter your name or team"
-                          onChange={(event) => {
-                            setPlayerName(event.target.value);
-                            setFormError('');
-                          }}
-                        />
-
-                      </div>
-
-                      <div className="form-group">
-
-                        <label htmlFor="phone-number">
-                          Contact Number
-                        </label>
-
-                        <input
-                          id="phone-number"
-                          type="tel"
-                          value={phoneNumber}
-                          placeholder="10-digit mobile number"
-                          maxLength="10"
-                          onChange={(event) => {
-                            const value =
-                              event.target.value.replace(
-                                /\D/g,
-                                ''
-                              );
-
-                            setPhoneNumber(value);
-                            setFormError('');
-                          }}
-                        />
-
-                      </div>
-
-                    </div>
-
-                    {/* Error */}
-                    {formError && (
-                      <p className="form-error">
-                        ⚠ {formError}
-                      </p>
-                    )}
-
-                    {/* Footer */}
-                    <div className="booking-footer">
-
-                      <div className="total-price">
-
-                        <span>Total</span>
+                        <small>
+                          Date
+                        </small>
 
                         <strong>
-                          {selectedSlot.price}
+                          {bookingDate ||
+                            'Choose date'}
                         </strong>
 
                       </div>
 
-                      <button
-                        type="button"
-                        className="confirm-booking-btn"
-                        onClick={handleContinue}
-                      >
-                        Continue to Confirmation
-                      </button>
+                    </div>
+
+
+                    {/* Time */}
+
+                    <div className="booking-detail">
+
+                      <span>
+                        ⏰
+                      </span>
+
+                      <div>
+
+                        <small>
+                          Time
+                        </small>
+
+                        <strong>
+                          {selectedSlot.startTime}
+                          {' - '}
+                          {selectedSlot.endTime}
+                        </strong>
+
+                      </div>
 
                     </div>
 
-                  </section>
-                )}
 
-                {/* Confirmation */}
-                {selectedSlot && showConfirmation && (
-                  <section className="booking-panel confirmation-panel">
+                    {/* Price */}
 
-                    <div className="booking-header">
+                    <div className="booking-detail">
+
+                      <span>
+                        💰
+                      </span>
 
                       <div>
-                        <span className="booking-label">
-                          STEP 2 OF 2
-                        </span>
 
-                        <h3>
-                          Review Your Booking
-                        </h3>
+                        <small>
+                          Price
+                        </small>
+
+                        <strong>
+                          ₹{selectedSlot.price} / hour
+                        </strong>
+
                       </div>
-
-                      <button
-                        type="button"
-                        className="close-booking-btn"
-                        onClick={handleCloseBooking}
-                        aria-label="Close booking panel"
-                      >
-                        ×
-                      </button>
 
                     </div>
 
-                    <div className="confirmation-success">
+                  </div>
 
-                      <div className="success-icon">
-                        ✓
+
+                  {/* Booking Form */}
+
+                  <div className="booking-form">
+
+                    {/* Date */}
+
+                    <div className="form-group">
+
+                      <label htmlFor="booking-date">
+                        Select Date
+                      </label>
+
+                      <input
+                        id="booking-date"
+                        type="date"
+                        value={bookingDate}
+                        onChange={(event) => {
+
+                          setBookingDate(
+                            event.target.value
+                          );
+
+                          setFormError('');
+                        }}
+                      />
+
+                    </div>
+
+
+                    {/* Player Name */}
+
+                    <div className="form-group">
+
+                      <label htmlFor="player-name">
+                        Player / Team Name
+                      </label>
+
+                      <input
+                        id="player-name"
+                        type="text"
+                        value={playerName}
+                        placeholder="Enter your name or team"
+                        onChange={(event) => {
+
+                          setPlayerName(
+                            event.target.value
+                          );
+
+                          setFormError('');
+                        }}
+                      />
+
+                    </div>
+
+
+                    {/* Phone */}
+
+                    <div className="form-group">
+
+                      <label htmlFor="phone-number">
+                        Contact Number
+                      </label>
+
+                      <input
+                        id="phone-number"
+                        type="tel"
+                        value={phoneNumber}
+                        placeholder="10-digit mobile number"
+                        maxLength="10"
+                        onChange={(event) => {
+
+                          const value =
+                            event.target.value.replace(
+                              /\D/g,
+                              ''
+                            );
+
+                          setPhoneNumber(value);
+
+                          setFormError('');
+                        }}
+                      />
+
+                    </div>
+
+                  </div>
+
+
+                  {/* Form Error */}
+
+                  {formError && (
+
+                    <p className="form-error">
+                      ⚠ {formError}
+                    </p>
+
+                  )}
+
+
+                  {/* Booking Footer */}
+
+                  <div className="booking-footer">
+
+                    <div className="total-price">
+
+                      <span>
+                        Total
+                      </span>
+
+                      <strong>
+                        ₹{selectedSlot.price}
+                      </strong>
+
+                    </div>
+
+
+                    <button
+                      type="button"
+                      className="confirm-booking-btn"
+                      onClick={handleContinue}
+                    >
+                      Continue to Confirmation
+                    </button>
+
+                  </div>
+
+                </section>
+
+              )}
+
+
+            {/* ==================================
+                STEP 2 — Confirmation
+            ================================== */}
+
+            {selectedSlot &&
+              showConfirmation && (
+
+                <section
+                  className="booking-panel confirmation-panel"
+                >
+
+                  <div className="booking-header">
+
+                    <div>
+
+                      <span className="booking-label">
+                        STEP 2 OF 2
+                      </span>
+
+                      <h3>
+                        Review Your Booking
+                      </h3>
+
+                    </div>
+
+
+                    <button
+                      type="button"
+                      className="close-booking-btn"
+                      onClick={handleCloseBooking}
+                      aria-label="Close booking panel"
+                    >
+                      ×
+                    </button>
+
+                  </div>
+
+
+                  {/* ==================================
+                      Successful Booking
+                  ================================== */}
+
+                  {bookingSuccess ? (
+
+                    <>
+
+                      <div className="confirmation-success">
+
+                        <div className="success-icon">
+                          ✓
+                        </div>
+
+                        <div>
+
+                          <h4>
+                            Booking Confirmed!
+                          </h4>
+
+                          <p>
+                            Your turf session has been
+                            successfully booked.
+                          </p>
+
+                        </div>
+
                       </div>
 
-                      <div>
-                        <h4>
-                          Everything looks good!
-                        </h4>
 
-                        <p>
-                          Review your booking details before
-                          confirming your session.
+                      <div className="confirmation-details">
+
+                        <div>
+
+                          <span>
+                            Booking Date
+                          </span>
+
+                          <strong>
+                            {bookingDate}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Time Slot
+                          </span>
+
+                          <strong>
+                            {selectedSlot.startTime}
+                            {' - '}
+                            {selectedSlot.endTime}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Player / Team
+                          </span>
+
+                          <strong>
+                            {playerName}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Contact Number
+                          </span>
+
+                          <strong>
+                            {phoneNumber}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Total Amount
+                          </span>
+
+                          <strong>
+                            ₹{selectedSlot.price}
+                          </strong>
+
+                        </div>
+
+                      </div>
+
+
+                      <div className="booking-footer">
+
+                        <button
+                          type="button"
+                          className="confirm-booking-btn"
+                          onClick={handleCloseBooking}
+                        >
+                          Done
+                        </button>
+
+                      </div>
+
+                    </>
+
+                  ) : (
+
+                    <>
+
+                      {/* Review Message */}
+
+                      <div className="confirmation-success">
+
+                        <div className="success-icon">
+                          ✓
+                        </div>
+
+                        <div>
+
+                          <h4>
+                            Everything looks good!
+                          </h4>
+
+                          <p>
+                            Review your booking details
+                            before confirming your session.
+                          </p>
+
+                        </div>
+
+                      </div>
+
+
+                      {/* Confirmation Details */}
+
+                      <div className="confirmation-details">
+
+                        <div>
+
+                          <span>
+                            Booking Date
+                          </span>
+
+                          <strong>
+                            {bookingDate}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Time Slot
+                          </span>
+
+                          <strong>
+                            {selectedSlot.startTime}
+                            {' - '}
+                            {selectedSlot.endTime}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Player / Team
+                          </span>
+
+                          <strong>
+                            {playerName}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Contact Number
+                          </span>
+
+                          <strong>
+                            {phoneNumber}
+                          </strong>
+
+                        </div>
+
+
+                        <div>
+
+                          <span>
+                            Total Amount
+                          </span>
+
+                          <strong>
+                            ₹{selectedSlot.price}
+                          </strong>
+
+                        </div>
+
+                      </div>
+
+
+                      {/* Booking Error */}
+
+                      {bookingError && (
+
+                        <p className="form-error">
+                          ⚠ {bookingError}
                         </p>
+
+                      )}
+
+
+                      {/* Confirmation Footer */}
+
+                      <div className="booking-footer">
+
+                        <button
+                          type="button"
+                          className="edit-booking-btn"
+                          onClick={handleEditBooking}
+                          disabled={bookingLoading}
+                        >
+                          ← Edit Booking
+                        </button>
+
+
+                        <button
+                          type="button"
+                          className="confirm-booking-btn"
+                          onClick={handleConfirmBooking}
+                          disabled={bookingLoading}
+                        >
+                          {bookingLoading
+                            ? 'Confirming...'
+                            : 'Confirm Booking'}
+                        </button>
+
                       </div>
 
-                    </div>
+                    </>
 
-                    <div className="confirmation-details">
+                  )}
 
-                      <div>
-                        <span>Booking Date</span>
-                        <strong>{bookingDate}</strong>
-                      </div>
+                </section>
 
-                      <div>
-                        <span>Time Slot</span>
-                        <strong>{selectedSlot.time}</strong>
-                      </div>
+              )}
 
-                      <div>
-                        <span>Player / Team</span>
-                        <strong>{playerName}</strong>
-                      </div>
+          </section>
 
-                      <div>
-                        <span>Contact Number</span>
-                        <strong>{phoneNumber}</strong>
-                      </div>
-
-                      <div>
-                        <span>Total Amount</span>
-                        <strong>{selectedSlot.price}</strong>
-                      </div>
-
-                    </div>
-
-                    <div className="booking-footer">
-
-                      <button
-                        type="button"
-                        className="edit-booking-btn"
-                        onClick={handleEditBooking}
-                      >
-                        ← Edit Booking
-                      </button>
-
-                      <button
-                        type="button"
-                        className="confirm-booking-btn"
-                        onClick={handleConfirmBooking}
-                      >
-                        Confirm Booking
-                      </button>
-
-                    </div>
-
-                  </section>
-                )}
-
-              </section>
-            )}
-
-          </>
         )}
 
       </main>
 
-      {/* Footer */}
+
+      {/* ======================================
+          Footer
+      ====================================== */}
+
       <footer className="footer">
+
         <p>
           © 2026 PGC Turf Arena. All rights reserved.
         </p>
+
       </footer>
 
     </div>
