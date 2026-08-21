@@ -1,3 +1,4 @@
+
 const express = require('express');
 const mongoose = require('mongoose');
 
@@ -5,6 +6,11 @@ const Booking = require('../models/Booking');
 const Slot = require('../models/Slot');
 
 const router = express.Router();
+
+
+// ==========================================
+// CREATE BOOKING
+// ==========================================
 
 router.post('/', async (req, res) => {
   try {
@@ -18,7 +24,11 @@ router.post('/', async (req, res) => {
       phoneNumber,
     } = req.body;
 
+
+    // ------------------------------
     // Validate required fields
+    // ------------------------------
+
     if (
       !turf ||
       !slot ||
@@ -32,7 +42,11 @@ router.post('/', async (req, res) => {
       });
     }
 
+
+    // ------------------------------
     // Validate MongoDB IDs
+    // ------------------------------
+
     if (
       !mongoose.Types.ObjectId.isValid(turf) ||
       !mongoose.Types.ObjectId.isValid(slot)
@@ -43,7 +57,11 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Validate phone
+
+    // ------------------------------
+    // Validate phone number
+    // ------------------------------
+
     if (!/^[0-9]{10}$/.test(phoneNumber)) {
       return res.status(400).json({
         success: false,
@@ -51,7 +69,11 @@ router.post('/', async (req, res) => {
       });
     }
 
+
+    // ------------------------------
     // Find slot
+    // ------------------------------
+
     const selectedSlot = await Slot.findById(slot);
 
     if (!selectedSlot) {
@@ -61,7 +83,11 @@ router.post('/', async (req, res) => {
       });
     }
 
+
+    // ------------------------------
     // Check slot status
+    // ------------------------------
+
     if (selectedSlot.status === 'Booked') {
       return res.status(409).json({
         success: false,
@@ -69,7 +95,11 @@ router.post('/', async (req, res) => {
       });
     }
 
+
+    // ------------------------------
     // Check turf
+    // ------------------------------
+
     if (selectedSlot.turf.toString() !== turf) {
       return res.status(400).json({
         success: false,
@@ -77,7 +107,11 @@ router.post('/', async (req, res) => {
       });
     }
 
+
+    // ------------------------------
     // Create booking
+    // ------------------------------
+
     const booking = await Booking.create({
       turf,
       slot,
@@ -88,12 +122,20 @@ router.post('/', async (req, res) => {
       status: 'Confirmed',
     });
 
+
+    // ------------------------------
     // Mark slot as booked
+    // ------------------------------
+
     selectedSlot.status = 'Booked';
 
     await selectedSlot.save();
 
-    // Get complete booking
+
+    // ------------------------------
+    // Return complete booking
+    // ------------------------------
+
     const populatedBooking =
       await Booking.findById(booking._id)
         .populate('turf', 'name location')
@@ -102,10 +144,12 @@ router.post('/', async (req, res) => {
           'startTime endTime price status'
         );
 
+
     console.log(
       'Booking created:',
       booking._id.toString()
     );
+
 
     return res.status(201).json({
       success: true,
@@ -113,7 +157,9 @@ router.post('/', async (req, res) => {
       booking: populatedBooking,
     });
 
+
   } catch (error) {
+
     console.error(
       'Booking creation error:',
       error
@@ -126,4 +172,52 @@ router.post('/', async (req, res) => {
   }
 });
 
+
+// ==========================================
+// GET ALL BOOKINGS
+// ==========================================
+
+router.get('/', async (req, res) => {
+  try {
+
+    console.log('GET /api/bookings received');
+
+
+    const bookings = await Booking.find()
+      .populate(
+        'turf',
+        'name location'
+      )
+      .populate(
+        'slot',
+        'startTime endTime price status'
+      )
+      .sort({
+        createdAt: -1,
+      });
+
+
+    return res.status(200).json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      'Fetch bookings error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch bookings.',
+    });
+  }
+});
+
+
 module.exports = router;
+

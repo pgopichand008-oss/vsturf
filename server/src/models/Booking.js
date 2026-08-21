@@ -23,14 +23,12 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      minlength: 2,
-      maxlength: 100,
     },
 
     phoneNumber: {
       type: String,
       required: true,
-      match: /^[0-9]{10}$/,
+      trim: true,
     },
 
     amount: {
@@ -46,15 +44,42 @@ const bookingSchema = new mongoose.Schema(
         'Confirmed',
         'Cancelled',
       ],
-      default: 'Pending',
+      default: 'Confirmed',
     },
   },
+
   {
     timestamps: true,
   }
 );
 
-module.exports = mongoose.model(
-  'Booking',
-  bookingSchema
+
+// ==========================================
+// Prevent duplicate active bookings
+// for the same slot
+// ==========================================
+
+bookingSchema.index(
+  {
+    slot: 1,
+    status: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: {
+        $in: [
+          'Pending',
+          'Confirmed',
+        ],
+      },
+    },
+  }
 );
+
+
+module.exports =
+  mongoose.model(
+    'Booking',
+    bookingSchema
+  );

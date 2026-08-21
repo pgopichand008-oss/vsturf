@@ -7,6 +7,7 @@ require('dotenv').config();
 const turfRoutes = require('./routes/turfRoutes');
 const slotRoutes = require('./routes/slotRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
@@ -41,6 +42,8 @@ app.use('/api/turfs', turfRoutes);
 app.use('/api/slots', slotRoutes);
 
 app.use('/api/bookings', bookingRoutes);
+
+app.use('/api/auth', authRoutes);
 
 
 // ==========================================

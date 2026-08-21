@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import './App.css';
 import SlotCard from './components/SlotCard';
 
+const API_URL = 'http://localhost:5000';
+
 function App() {
   const [showSlots, setShowSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -25,30 +27,30 @@ function App() {
   const [bookingError, setBookingError] = useState('');
 
   // ==========================================
-  // Fetch Turf Information
+  // Fetch Turf
   // ==========================================
 
   useEffect(() => {
-    const fetchTurf = async () => {
+    async function fetchTurf() {
       try {
         setTurfLoading(true);
         setTurfError('');
 
         const response = await fetch(
-          'http://localhost:5000/api/turfs'
+          `${API_URL}/api/turfs`
         );
 
         if (!response.ok) {
           throw new Error(
-            'Failed to fetch turf information'
+            'Failed to fetch turf information.'
           );
         }
 
         const data = await response.json();
 
-        if (!data.length) {
+        if (!Array.isArray(data) || data.length === 0) {
           throw new Error(
-            'No turf information found'
+            'No turf information found.'
           );
         }
 
@@ -65,34 +67,52 @@ function App() {
       } finally {
         setTurfLoading(false);
       }
-    };
+    }
 
     fetchTurf();
   }, []);
 
   // ==========================================
-  // Fetch Slots
+  // Fetch Slots For Selected Date
   // ==========================================
 
   useEffect(() => {
-    const fetchSlots = async () => {
+    if (!bookingDate) {
+      setSlots([]);
+      return;
+    }
+
+    async function fetchSlots() {
       try {
         setSlotsLoading(true);
         setSlotsError('');
+        setSelectedSlot(null);
 
         const response = await fetch(
-          'http://localhost:5000/api/slots'
+          `${API_URL}/api/slots?date=${bookingDate}`
         );
-
-        if (!response.ok) {
-          throw new Error(
-            'Failed to fetch slots'
-          );
-        }
 
         const data = await response.json();
 
-        setSlots(data);
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              'Failed to fetch slots.'
+          );
+        }
+
+        /*
+          Our new API returns:
+
+          {
+            success: true,
+            date: "...",
+            count: 4,
+            slots: [...]
+          }
+        */
+
+        setSlots(data.slots || []);
       } catch (error) {
         console.error(
           'Error fetching slots:',
@@ -100,18 +120,21 @@ function App() {
         );
 
         setSlotsError(
-          'Unable to load time slots. Please try again.'
+          error.message ||
+            'Unable to load slots.'
         );
+
+        setSlots([]);
       } finally {
         setSlotsLoading(false);
       }
-    };
+    }
 
     fetchSlots();
-  }, []);
+  }, [bookingDate]);
 
   // ==========================================
-  // Reserve Slot
+  // Open Booking Form
   // ==========================================
 
   function handleReserve(slot) {
@@ -139,7 +162,7 @@ function App() {
   }
 
   // ==========================================
-  // Continue to Confirmation
+  // Continue To Confirmation
   // ==========================================
 
   function handleContinue() {
@@ -148,6 +171,13 @@ function App() {
     if (!bookingDate) {
       setFormError(
         'Please select a booking date.'
+      );
+      return;
+    }
+
+    if (!selectedSlot) {
+      setFormError(
+        'Please select a time slot.'
       );
       return;
     }
@@ -192,7 +222,7 @@ function App() {
       setBookingError('');
 
       const response = await fetch(
-        'http://localhost:5000/api/bookings',
+        `${API_URL}/api/bookings`,
         {
           method: 'POST',
 
@@ -203,9 +233,9 @@ function App() {
           body: JSON.stringify({
             turf: turf._id,
             slot: selectedSlot._id,
-            bookingDate: bookingDate,
+            bookingDate,
             playerName: playerName.trim(),
-            phoneNumber: phoneNumber,
+            phoneNumber,
           }),
         }
       );
@@ -215,7 +245,7 @@ function App() {
       if (!response.ok) {
         throw new Error(
           data.message ||
-            'Failed to create booking'
+            'Failed to create booking.'
         );
       }
 
@@ -226,7 +256,7 @@ function App() {
 
       setBookingSuccess(true);
 
-      // Update the slot in frontend
+      // Update current slot immediately
       setSlots((currentSlots) =>
         currentSlots.map((slot) =>
           slot._id === selectedSlot._id
@@ -244,7 +274,7 @@ function App() {
               ...currentSlot,
               status: 'Booked',
             }
-          : currentSlot
+          : null
       );
     } catch (error) {
       console.error(
@@ -276,7 +306,7 @@ function App() {
   }
 
   // ==========================================
-  // Error Screen
+  // Turf Error
   // ==========================================
 
   if (turfError) {
@@ -316,9 +346,9 @@ function App() {
 
           <a
             href="#slots"
-            onClick={() =>
-              setShowSlots(true)
-            }
+            onClick={() => {
+              setShowSlots(true);
+            }}
           >
             Book a Turf
           </a>
@@ -358,12 +388,12 @@ function App() {
           <button
             type="button"
             className="primary-btn"
-            onClick={() =>
-              setShowSlots(!showSlots)
-            }
+            onClick={() => {
+              setShowSlots(!showSlots);
+            }}
           >
             {showSlots
-              ? 'Close Slot List'
+              ? 'Close Booking'
               : 'Check Available Slots'}
           </button>
 
@@ -371,15 +401,13 @@ function App() {
 
 
         {/* ======================================
-            Information Cards
+            Turf Information
         ====================================== */}
 
         <section
           className="info-grid"
           id="info"
         >
-
-          {/* Location */}
 
           <div className="info-card">
 
@@ -388,7 +416,6 @@ function App() {
             </span>
 
             <div>
-
               <h4>
                 Location
               </h4>
@@ -396,13 +423,10 @@ function App() {
               <p>
                 {turf.location}
               </p>
-
             </div>
 
           </div>
 
-
-          {/* Operating Hours */}
 
           <div className="info-card">
 
@@ -411,7 +435,6 @@ function App() {
             </span>
 
             <div>
-
               <h4>
                 Operating Hours
               </h4>
@@ -420,13 +443,10 @@ function App() {
                 {turf.openingTime} –{' '}
                 {turf.closingTime}
               </p>
-
             </div>
 
           </div>
 
-
-          {/* Pricing */}
 
           <div className="info-card">
 
@@ -435,7 +455,6 @@ function App() {
             </span>
 
             <div>
-
               <h4>
                 Pricing
               </h4>
@@ -444,13 +463,10 @@ function App() {
                 Starting at ₹
                 {turf.basePrice} / hour
               </p>
-
             </div>
 
           </div>
 
-
-          {/* Turf */}
 
           <div className="info-card">
 
@@ -459,7 +475,6 @@ function App() {
             </span>
 
             <div>
-
               <h4>
                 Turf
               </h4>
@@ -467,7 +482,6 @@ function App() {
               <p>
                 {turf.name}
               </p>
-
             </div>
 
           </div>
@@ -476,7 +490,7 @@ function App() {
 
 
         {/* ======================================
-            Slot Booking Section
+            Booking Section
         ====================================== */}
 
         {showSlots && (
@@ -493,62 +507,145 @@ function App() {
               </span>
 
               <h3>
-                Available Time Slots
+                Choose Your Date
               </h3>
 
               <p>
-                Choose your preferred time and reserve
-                your cricket session.
+                Select a date to see the available
+                time slots.
               </p>
 
             </div>
 
 
-            {/* Loading */}
+            {/* ==================================
+                Date Selector
+            ================================== */}
 
-            {slotsLoading && (
+            <div className="booking-form">
 
-              <div className="loading-message">
-                Loading available slots...
+              <div className="form-group">
+
+                <label htmlFor="booking-date">
+                  Select Date
+                </label>
+
+                <input
+                  id="booking-date"
+                  type="date"
+                  value={bookingDate}
+                  min={
+                    new Date()
+                      .toISOString()
+                      .split('T')[0]
+                  }
+                  onChange={(event) => {
+                    setBookingDate(
+                      event.target.value
+                    );
+
+                    setSelectedSlot(null);
+                    setShowConfirmation(false);
+                    setFormError('');
+                    setBookingError('');
+                  }}
+                />
+
               </div>
 
-            )}
+            </div>
 
 
-            {/* Error */}
+            {/* ==================================
+                Loading Slots
+            ================================== */}
 
-            {slotsError && (
+            {bookingDate &&
+              slotsLoading && (
 
-              <div className="error-message">
-                {slotsError}
-              </div>
+                <div className="loading-message">
+                  Loading available slots...
+                </div>
 
-            )}
+              )}
 
 
-            {/* Slots */}
+            {/* ==================================
+                Slot Error
+            ================================== */}
 
-            {!slotsLoading &&
+            {bookingDate &&
+              slotsError && (
+
+                <div className="error-message">
+                  {slotsError}
+                </div>
+
+              )}
+
+
+            {/* ==================================
+                No Slots
+            ================================== */}
+
+            {bookingDate &&
+              !slotsLoading &&
+              !slotsError &&
+              slots.length === 0 && (
+
+                <div className="error-message">
+
+                  No slots are available for this
+                  date yet.
+
+                </div>
+
+              )}
+
+
+            {/* ==================================
+                Slot List
+            ================================== */}
+
+            {bookingDate &&
+              !slotsLoading &&
               !slotsError &&
               slots.length > 0 && (
 
-                <div className="slots-grid">
+                <>
 
-                  {slots.map((slot) => (
+                  <div className="section-heading">
 
-                    <SlotCard
-                      key={slot._id}
-                      time={`${slot.startTime} - ${slot.endTime}`}
-                      status={slot.status}
-                      price={`₹${slot.price}`}
-                      onReserve={() =>
-                        handleReserve(slot)
-                      }
-                    />
+                    <span className="section-label">
+                      AVAILABLE SESSIONS
+                    </span>
 
-                  ))}
+                    <h3>
+                      Choose Your Time
+                    </h3>
 
-                </div>
+                  </div>
+
+
+                  <div className="slots-grid">
+
+                    {slots.map((slot) => (
+
+                      <SlotCard
+                        key={slot._id}
+                        time={`${slot.startTime} - ${slot.endTime}`}
+                        status={slot.status}
+                        price={`₹${slot.price}`}
+                        onReserve={() =>
+                          handleReserve(slot)
+                        }
+                      />
+
+                    ))}
+
+                  </div>
+
+                </>
 
               )}
 
@@ -576,11 +673,12 @@ function App() {
 
                     </div>
 
-
                     <button
                       type="button"
                       className="close-booking-btn"
-                      onClick={handleCloseBooking}
+                      onClick={
+                        handleCloseBooking
+                      }
                       aria-label="Close booking panel"
                     >
                       ×
@@ -592,8 +690,6 @@ function App() {
                   {/* Booking Summary */}
 
                   <div className="booking-summary">
-
-                    {/* Date */}
 
                     <div className="booking-detail">
 
@@ -608,16 +704,13 @@ function App() {
                         </small>
 
                         <strong>
-                          {bookingDate ||
-                            'Choose date'}
+                          {bookingDate}
                         </strong>
 
                       </div>
 
                     </div>
 
-
-                    {/* Time */}
 
                     <div className="booking-detail">
 
@@ -642,8 +735,6 @@ function App() {
                     </div>
 
 
-                    {/* Price */}
-
                     <div className="booking-detail">
 
                       <span>
@@ -657,7 +748,8 @@ function App() {
                         </small>
 
                         <strong>
-                          ₹{selectedSlot.price} / hour
+                          ₹{selectedSlot.price}
+                          {' / hour'}
                         </strong>
 
                       </div>
@@ -667,36 +759,9 @@ function App() {
                   </div>
 
 
-                  {/* Booking Form */}
+                  {/* Customer Information */}
 
                   <div className="booking-form">
-
-                    {/* Date */}
-
-                    <div className="form-group">
-
-                      <label htmlFor="booking-date">
-                        Select Date
-                      </label>
-
-                      <input
-                        id="booking-date"
-                        type="date"
-                        value={bookingDate}
-                        onChange={(event) => {
-
-                          setBookingDate(
-                            event.target.value
-                          );
-
-                          setFormError('');
-                        }}
-                      />
-
-                    </div>
-
-
-                    {/* Player Name */}
 
                     <div className="form-group">
 
@@ -721,8 +786,6 @@ function App() {
 
                     </div>
 
-
-                    {/* Phone */}
 
                     <div className="form-group">
 
@@ -755,7 +818,7 @@ function App() {
                   </div>
 
 
-                  {/* Form Error */}
+                  {/* Validation Error */}
 
                   {formError && (
 
@@ -766,7 +829,7 @@ function App() {
                   )}
 
 
-                  {/* Booking Footer */}
+                  {/* Footer */}
 
                   <div className="booking-footer">
 
@@ -823,11 +886,12 @@ function App() {
 
                     </div>
 
-
                     <button
                       type="button"
                       className="close-booking-btn"
-                      onClick={handleCloseBooking}
+                      onClick={
+                        handleCloseBooking
+                      }
                       aria-label="Close booking panel"
                     >
                       ×
@@ -836,9 +900,7 @@ function App() {
                   </div>
 
 
-                  {/* ==================================
-                      Successful Booking
-                  ================================== */}
+                  {/* Successful Booking */}
 
                   {bookingSuccess ? (
 
@@ -857,8 +919,8 @@ function App() {
                           </h4>
 
                           <p>
-                            Your turf session has been
-                            successfully booked.
+                            Your turf session has
+                            been successfully booked.
                           </p>
 
                         </div>
@@ -942,7 +1004,9 @@ function App() {
                         <button
                           type="button"
                           className="confirm-booking-btn"
-                          onClick={handleCloseBooking}
+                          onClick={
+                            handleCloseBooking
+                          }
                         >
                           Done
                         </button>
@@ -954,8 +1018,6 @@ function App() {
                   ) : (
 
                     <>
-
-                      {/* Review Message */}
 
                       <div className="confirmation-success">
 
@@ -970,16 +1032,15 @@ function App() {
                           </h4>
 
                           <p>
-                            Review your booking details
-                            before confirming your session.
+                            Review your booking
+                            details before
+                            confirming.
                           </p>
 
                         </div>
 
                       </div>
 
-
-                      {/* Confirmation Details */}
 
                       <div className="confirmation-details">
 
@@ -1063,14 +1124,16 @@ function App() {
                       )}
 
 
-                      {/* Confirmation Footer */}
+                      {/* Confirmation Buttons */}
 
                       <div className="booking-footer">
 
                         <button
                           type="button"
                           className="edit-booking-btn"
-                          onClick={handleEditBooking}
+                          onClick={
+                            handleEditBooking
+                          }
                           disabled={bookingLoading}
                         >
                           ← Edit Booking
@@ -1080,7 +1143,9 @@ function App() {
                         <button
                           type="button"
                           className="confirm-booking-btn"
-                          onClick={handleConfirmBooking}
+                          onClick={
+                            handleConfirmBooking
+                          }
                           disabled={bookingLoading}
                         >
                           {bookingLoading
